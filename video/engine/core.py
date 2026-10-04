@@ -284,9 +284,12 @@ def draw_text(img, text, x, y, size, name="bold", color=WHITE, alpha=1.0, anchor
     ox = {"l": 0, "m": w / 2, "r": w}[anchor[0]]
     oy = {"t": 0, "m": h / 2, "b": h}[anchor[1]]
     if shadow > 0:
-        sh = np.zeros_like(t)
-        sh[..., 3] = cv2.GaussianBlur(t[..., 3], (0, 0), max(2, size * 0.12)) * shadow
-        over(img, sh, x - ox, y - oy + size * 0.04, alpha)
+        sig = max(2.0, size * 0.12)
+        pad = int(sig * 3)
+        a = cv2.GaussianBlur(np.pad(t[..., 3], pad), (0, 0), sig) * shadow
+        sh = np.zeros((a.shape[0], a.shape[1], 4), np.float32)
+        sh[..., 3] = a
+        over(img, sh, x - ox - pad, y - oy - pad + size * 0.04, alpha)
     over(img, t, x - ox, y - oy, alpha)
     return w, h
 
