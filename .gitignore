@@ -1,0 +1,4 @@
+video/.assets/
+video/out/
+__pycache__/
+*.pyc
