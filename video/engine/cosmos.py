@@ -282,6 +282,7 @@ def star_sprite(r, color, spikes=0.0, spike_len=0):
         sp = (np.exp(-(yy / w) ** 2) * np.exp(-np.abs(xx) / (spike_len * 0.28))
               + np.exp(-(xx / w) ** 2) * np.exp(-np.abs(yy) / (spike_len * 0.28)))
         img += (sp * spikes * 0.9)[..., None] * (0.4 + 0.6 * c)
+    img *= (np.clip(1 - d / L, 0, 1) ** 1.5)[..., None]       # 边缘淡出，避免方形截断
     return img.astype(np.float32), L
 
 
@@ -402,3 +403,32 @@ def rooftops(img, base_y, seed=8, color=(0.05, 0.07, 0.12)):
         else:
             fill_poly(img, [(x, H + 5), (x, top), (x + bw, top), (x + bw, H + 5)], color)
         x += bw + rng.uniform(-10, 8)
+
+
+@lru_cache(maxsize=4)
+def planet_texture(kind="jupiter", seed=51):
+    """木星（条纹 + 大红斑）、冥王星（米色 + 亮"心形"）、卡戎（灰色 + 红褐极冠）。"""
+    h, w = 256, 512
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    lat = (0.5 - yy / h) * np.pi
+    if kind == "jupiter":
+        warp = (fbm(h, w, seed, 5, base=6, tile_x=True) - 0.5) * 0.18
+        band = np.sin((lat + warp) * 9.0) * 0.5 + 0.5
+        band2 = np.sin((lat + warp * 1.6) * 23.0) * 0.5 + 0.5
+        c1, c2, c3 = np.array((0.94, 0.88, 0.76)), np.array((0.80, 0.62, 0.45)), np.array((0.62, 0.45, 0.33))
+        tex = c1 * band[..., None] + c2 * (1 - band[..., None])
+        tex = tex * (0.85 + 0.15 * band2[..., None]) + c3 * 0.1 * (1 - band2[..., None])
+        spot = np.exp(-(((xx - w * 0.62) / 34) ** 2 + ((yy - h * 0.66) / 13) ** 2))
+        tex = tex * (1 - spot[..., None] * 0.8) + np.array((0.78, 0.36, 0.24)) * spot[..., None] * 0.8
+    elif kind == "pluto":
+        n = fbm(h, w, seed, 6, base=5, tile_x=True)
+        dark = np.clip((n - 0.55) * 4, 0, 1)
+        tex = np.array((0.84, 0.74, 0.62)) * (1 - dark[..., None]) + np.array((0.42, 0.30, 0.24)) * dark[..., None]
+        heart = np.exp(-(((xx - w * 0.5) / 60) ** 2 + ((yy - h * 0.56) / 34) ** 2))
+        tex = tex * (1 - heart[..., None]) + np.array((0.97, 0.94, 0.9)) * heart[..., None]
+    else:  # charon
+        n = fbm(h, w, seed + 3, 6, base=6, tile_x=True)
+        tex = np.array((0.55, 0.55, 0.58))[None, None] * (0.8 + 0.4 * n[..., None])
+        cap = np.clip((lat - 1.0) * 4, 0, 1)[..., None]
+        tex = tex * (1 - cap) + np.array((0.55, 0.32, 0.26)) * cap
+    return np.clip(tex, 0, 1).astype(np.float32)
