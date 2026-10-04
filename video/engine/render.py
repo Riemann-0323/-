@@ -10,6 +10,8 @@ _frame_fn = None
 
 
 def _encode_chunk(args):
+    import cv2
+    cv2.setNumThreads(1)
     idx, a, b, path = args
     cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}",
            "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-preset", "medium", "-crf", "18",

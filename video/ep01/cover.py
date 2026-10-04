@@ -1,6 +1,6 @@
-"""EP03 封面：16:9（B站/抖音）与 3:4（小红书）。
+"""第 1 期封面：16:9（B站/抖音）与 3:4（小红书）。
 
-用法（在 video/ 目录下）：python3 -m ep03.cover
+用法（在 video/ 目录下）：python3 -m ep01.cover
 """
 import sys
 from pathlib import Path
@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT))
 from engine.core import ORANGE, TEAL, WHITE, draw_text, over, round_rect_rgba, to_u8, vgradient  # noqa: E402
 from engine.cosmos import StarField, hill_silhouette, milky_way, person_silhouette, star_point  # noqa: E402
 
-OUT = ROOT / "out" / "ep03"
+OUT = ROOT / "out" / "ep01"
 
 
 def night(w, h, seed=5, angle=-28):
@@ -37,7 +37,7 @@ def landscape():
     xs, ys = hill_silhouette(img, 960, 50, seed=2, color=(0.01, 0.013, 0.025))
     person_silhouette(img, 1560, np.interp(1560, xs, ys) + 5, 170, color=(0.01, 0.013, 0.025))
     star_point(img, 1480, 300, 12, (1.0, 0.45, 0.18), k=1.6, spikes=0.7, spike_len=200)
-    draw_text(img, "反直觉 #03", 110, 120, 48, "title", TEAL, anchor="lm", shadow=0.8)
+    draw_text(img, "反直觉 #01", 110, 120, 48, "title", TEAL, anchor="lm", shadow=0.8)
     draw_text(img, "你看到的星星", 110, 330, 150, "title", WHITE, anchor="lm", shadow=0.9)
     draw_text(img, "还在吗？", 110, 520, 190, "title", TEAL, anchor="lm", shadow=0.9)
     stamp(img, "只对了一半", 470, 760, 92)
@@ -55,7 +55,7 @@ def portrait():
     img[mask > 0] = (0.01, 0.013, 0.025)
     person_silhouette(img, 760, float(np.interp(760, pts, ys)) + 5, 150, color=(0.01, 0.013, 0.025))
     star_point(img, 820, 420, 12, (1.0, 0.45, 0.18), k=1.6, spikes=0.7, spike_len=180)
-    draw_text(img, "反直觉 #03", w / 2, 110, 44, "title", TEAL, shadow=0.8)
+    draw_text(img, "反直觉 #01", w / 2, 110, 44, "title", TEAL, shadow=0.8)
     draw_text(img, "你看到的星星", w / 2, 560, 128, "title", WHITE, shadow=0.9)
     draw_text(img, "还在吗？", w / 2, 730, 170, "title", TEAL, shadow=0.9)
     stamp(img, "只对了一半", w / 2, 960, 84)

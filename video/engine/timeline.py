@@ -8,6 +8,27 @@ from . import tts
 
 
 @dataclass
+class Line:
+    """逐字稿里的一句话。
+
+    text  : 字幕显示的文字
+    tts   : 离线 Kokoro 读的文字（数字写汉字、多音字换同音字）；也作为语音识别校对的参照
+    mm    : 给 MiniMax 读的文字（默认用 text 去掉引号；MiniMax 自己会读数字，多音字用发音词典处理）
+    pause : 这句话之后的停顿（秒）
+    speed : 只对 Kokoro 生效的语速
+    """
+    text: str
+    tts: str = None
+    pause: float = 0.15
+    speed: float = None
+    mm: str = None
+
+    @property
+    def reference(self):
+        return self.tts or self.text
+
+
+@dataclass
 class Spoken:
     scene: str
     text: str
@@ -30,29 +51,29 @@ class SceneSpan:
     lines: list          # 本场景内各句的 (相对开始, 相对结束)
 
 
-def build(scenes, cache_dir, lead=0.6, scene_gap=0.12, tail=0.4, log=print):
+def build(scenes, voice, cache_dir, lead=0.35, scene_gap=0.03, tail=0.3, visual_lead=0.15, log=print):
+    """逐场景合成配音并排出时间轴。返回 (逐句信息, 场景区间, 总时长, 场景音频列表)。"""
     t = lead
-    spoken, spans = [], []
+    spoken, raw, scene_audio = [], [], []
     for name, lines in scenes:
-        first = t
+        audio, sr, times = voice.synth_scene(lines, cache_dir)
+        scene_audio.append((t, audio, sr))
         rel = []
-        for ln in lines:
-            x, sr = tts.synth(ln.spoken, cache_dir, speed=ln.speed)
-            dur = len(x) / sr
-            spoken.append(Spoken(name, ln.text, ln.spoken, t, dur, x, sr))
-            rel.append((t, t + dur))
-            t += dur + ln.pause
-        t += scene_gap
-        spans.append([name, first, t, rel])
+        for ln, (a, b) in zip(lines, times):
+            seg = audio[int(a * sr):int(b * sr)]
+            spoken.append(Spoken(name, ln.text, ln.reference, t + a, b - a, seg, sr))
+            rel.append((t + a, t + b))
+        first = t
+        t += len(audio) / sr + lines[-1].pause + scene_gap
+        raw.append([name, first, t, rel])
         log(f"  {name:10s} {first:6.2f}s – {t:6.2f}s  ({len(lines)} 句)")
     total = t + tail
-    # 场景画面比第一句话略早出现
-    out = []
-    for i, (name, first, end, rel) in enumerate(spans):
-        s = 0.0 if i == 0 else first - 0.25
-        e = spans[i + 1][1] - 0.25 if i + 1 < len(spans) else total
-        out.append(SceneSpan(name, s, e, [(a - s, b - s) for a, b in rel]))
-    return spoken, out, total
+    spans = []
+    for i, (name, first, end, rel) in enumerate(raw):
+        s = 0.0 if i == 0 else first - visual_lead
+        e = raw[i + 1][1] - visual_lead if i + 1 < len(raw) else total
+        spans.append(SceneSpan(name, s, e, [(a - s, b - s) for a, b in rel]))
+    return spoken, spans, total, scene_audio
 
 
 _SPLIT = re.compile(r"([，。？！：；])")

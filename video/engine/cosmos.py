@@ -368,16 +368,16 @@ def gate_tower(img, cx, base_y, w, color=SIL, windows=0.0):
     hall1 = plat - 78 * s
     fill_poly(img, [(cx - 240 * s, plat), (cx + 240 * s, plat), (cx + 240 * s, hall1), (cx - 240 * s, hall1)], color)
     if windows > 0:
+        from .core import rect as _rect
         for i in range(-4, 5):
-            from .core import rect
-            rect(img, cx + i * 48 * s - 12 * s, plat - 58 * s, cx + i * 48 * s + 12 * s, plat - 22 * s, (1.0, 0.62, 0.25), windows)
+            _rect(img, cx + i * 48 * s - 12 * s, plat - 58 * s, cx + i * 48 * s + 12 * s, plat - 22 * s, (1.0, 0.62, 0.25), windows)
     r1 = _roof(img, cx, hall1, 330 * s, 62 * s, 26 * s, color, s)
     hall2 = r1 - 52 * s
     fill_poly(img, [(cx - 190 * s, r1 + 4), (cx + 190 * s, r1 + 4), (cx + 190 * s, hall2), (cx - 190 * s, hall2)], color)
     if windows > 0:
+        from .core import rect as _rect
         for i in range(-3, 4):
-            from .core import rect
-            rect(img, cx + i * 48 * s - 11 * s, r1 - 42 * s, cx + i * 48 * s + 11 * s, r1 - 12 * s, (1.0, 0.62, 0.25), windows * 0.8)
+            _rect(img, cx + i * 48 * s - 11 * s, r1 - 42 * s, cx + i * 48 * s + 11 * s, r1 - 12 * s, (1.0, 0.62, 0.25), windows * 0.8)
     return _roof(img, cx, hall2, 270 * s, 80 * s, 30 * s, color, s)
 
 

@@ -1,42 +1,31 @@
-"""EP03 全部场景的画面。每个场景按本场景的局部时间 t（秒）绘制一帧。
+"""第 1 期场景：你看到的星星，还在吗？每个场景按局部时间 t（秒）绘制一帧。
 
 场景内用 self.at(k) / self.end(k) 取得第 k 句配音的开始/结束时间，让画面和台词对齐。
 """
-import bisect
 from functools import lru_cache
 
 import cv2
 import numpy as np
 
-from engine.core import (BG, DIM, FPS, GREY, H, ORANGE, TEAL, W, WHITE, add, back_out, canvas, circle,
-                         draw_text, ease_in_out, ease_out, fbm, fill_poly, line, lerp, over, polyline, ramp,
-                         rect, round_rect_rgba, smooth, text_width, to_u8, vgradient, vignette_mask, window, ellipse,
-                         blur)
+from engine.core import (DIM, GREY, H, ORANGE, TEAL, W, WHITE, add, blur, canvas, circle, draw_text, ease_in_out,
+                         ease_out, fbm, fill_poly, lerp, line, over, polyline, ramp, rect, round_rect_rgba, smooth,
+                         vgradient, window)
 from engine.cosmos import (Galaxy, StarField, acacia, affine, dunes, earth_texture, gate_tower, halo,
                            hill_silhouette, milky_way, moon_texture, person_silhouette, rooftops, sphere,
                            star_point, star_texture)
+from engine.props import bench, bus, bus_stop
+from engine.ui import (Outro, Scene, big_sky, count, fade_text, make_title, night_gradient, pill, pop, sky,
+                       title_text, warp)
 
-SKY_TOP, SKY_BOTTOM = (0.006, 0.010, 0.030), (0.045, 0.060, 0.120)
 SIRIUS_C, RED_C, SUN_C = (0.72, 0.84, 1.0), (1.0, 0.45, 0.18), (1.0, 0.85, 0.55)
 
 
 # ---------- 共享素材（每个进程只生成一次） ----------
 
 @lru_cache(maxsize=1)
-def night_gradient():
-    return vgradient(SKY_TOP, SKY_BOTTOM, curve=1.6)
-
-
-@lru_cache(maxsize=1)
-def big_sky():
-    return StarField(W + 600, H + 400, n=6500, seed=101, bright_n=90)
-
-
-@lru_cache(maxsize=1)
 def hook_assets():
     mw, dens = milky_way(W, H, seed=5)
     sf = StarField(n=5200, seed=1, density=dens, bright_n=70)
-    sil = np.zeros((H, W, 3), np.float32)
     mask = np.zeros((H, W, 3), np.float32)
     xs, ys = hill_silhouette(mask, 905, 55, seed=2, color=(1, 1, 1))
     person_silhouette(mask, 1310, np.interp(1310, xs, ys) + 5, 165, color=(1, 1, 1))
@@ -62,74 +51,6 @@ def galaxy_top_image():
 def andromeda_image():
     g = Galaxy(seed=23, winding=2.9)
     return g.render(2400, 1500, 1200, 750, 900, rot=0.4, tilt=0.27, tilt_angle=-0.5, exposure=0.55)
-
-
-def warp(img, M, size=(W, H)):
-    return cv2.warpAffine(img, np.float32(M), size, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
-
-
-def sky(t, zoom=1.0, rot=0.0, focus=(W / 2, H / 2), pan=(0, 0), gain=1.0, grad=True):
-    """通用夜空：渐变 + 可缩放/旋转的星场。focus 为画面上保持不动的点。"""
-    sf = big_sky()
-    src = (focus[0] + 300 + pan[0], focus[1] + 200 + pan[1])
-    M = affine(zoom, rot, center=focus, src_center=src)
-    img = night_gradient().copy() if grad else canvas((0, 0, 0))
-    img += sf.render(t, M) * gain
-    return img
-
-
-def pop(t, t0, dur=0.45):
-    """弹出动画：返回 (缩放, 透明度)。"""
-    x = ramp(t, t0, t0 + dur)
-    return (0.6 + 0.4 * back_out(x)) if x < 1 else 1.0, smooth(ramp(t, t0, t0 + dur * 0.6))
-
-
-def title_text(img, text, x, y, size, t, t0, color=WHITE, name="title", fade_out=None, shadow=0.6, **kw):
-    s, a = pop(t, t0)
-    if fade_out is not None:
-        a *= 1 - smooth(ramp(t, fade_out, fade_out + 0.4))
-    draw_text(img, text, x, y, size, name, color, alpha=a, scale=s, shadow=shadow, **kw)
-
-
-def fade_text(img, text, x, y, size, t, t0, color=WHITE, name="bold", dur=0.5, rise=18, alpha=1.0, **kw):
-    a = smooth(ramp(t, t0, t0 + dur)) * alpha
-    dy = (1 - ease_out(ramp(t, t0, t0 + dur))) * rise
-    draw_text(img, text, x, y + dy, size, name, color, alpha=a, shadow=0.6, **kw)
-
-
-def pill(img, text, x, y, size, fg, bg, alpha=1.0, name="bold", pad=(22, 10)):
-    if alpha <= 0:
-        return
-    w = int(text_width(text, size, name) + pad[0] * 2)
-    h = int(size * 1.25 + pad[1] * 2)
-    over(img, round_rect_rgba(w, h, h // 2, bg, 0.92), x - w / 2, y - h / 2, alpha)
-    draw_text(img, text, x, y + 1, size, name, fg, alpha=alpha)
-
-
-def count(t, t0, dur, value):
-    return value * ease_out(ramp(t, t0, t0 + dur))
-
-
-class Scene:
-    cut = False
-    tag = True
-
-    def __init__(self, span):
-        self.span = span
-        self.d = span.end - span.start
-        self.L = span.lines
-
-    def at(self, k):
-        return self.L[k][0]
-
-    def end(self, k):
-        return self.L[k][1]
-
-    def sfx(self):
-        return []
-
-    def draw(self, t):
-        raise NotImplementedError
 
 
 # ---------- 1. 开场钩子 ----------
@@ -161,46 +82,6 @@ class Hook(Scene):
         return [(0.2, "shimmer", 0.5), (self.at(2) + 0.55, "swish", 0.9), (self.at(2) + 0.6, "low_ding", 0.8)]
 
 
-# ---------- 2. 片头 ----------
-
-def logo(img, cx, cy, t, t0=0.0, scale=1.0):
-    p = ease_in_out(ramp(t, t0, t0 + 0.9))
-    r = 64 * scale
-    if p > 0:
-        pts = [(cx + r * np.cos(a), cy + r * np.sin(a)) for a in np.linspace(-np.pi / 2, -np.pi / 2 + 2 * np.pi * p, 80)]
-        polyline(img, pts, TEAL, 5 * scale)
-        orb = [(cx + r * 1.65 * np.cos(a), cy + r * 0.55 * np.sin(a)) for a in np.linspace(0, 2 * np.pi * p, 90)]
-        rot = []
-        c, s = np.cos(-0.35), np.sin(-0.35)
-        for x, y in orb:
-            dx, dy = x - cx, y - cy
-            rot.append((cx + dx * c - dy * s, cy + dx * s + dy * c))
-        polyline(img, rot, (0.85, 0.9, 1.0), 2.5 * scale, alpha=0.8)
-        ang = t * 1.6
-        dx, dy = r * 1.65 * np.cos(ang), r * 0.55 * np.sin(ang)
-        star_point(img, cx + dx * c - dy * s, cy + dx * s + dy * c, 3 * scale, ORANGE, k=p)
-        circle(img, cx, cy, r * 0.42, TEAL, alpha=0.9 * p)
-
-
-class Title(Scene):
-    tag = False
-
-    def draw(self, t):
-        img = sky(t, zoom=1.0, gain=0.55, pan=(t * 8, 0))
-        img *= 0.8
-        logo(img, W / 2, 250, t, 0.0)
-        fade_text(img, "反直觉研究所", W / 2, 420, 118, t, 0.35, name="title")
-        fade_text(img, "你的直觉，可能是错的", W / 2, 520, 38, t, 0.8, color=GREY, name="medium")
-        a = smooth(ramp(t, self.at(1) - 0.1, self.at(1) + 0.4))
-        line(img, (W / 2 - 300 * a, 600), (W / 2 + 300 * a, 600), DIM, 2)
-        pill(img, "第一季 · 反直觉 #03", W / 2, 670, 30, (0.02, 0.05, 0.08), TEAL, alpha=a)
-        fade_text(img, "你看到的星星，还在吗？", W / 2, 775, 74, t, self.at(1) + 0.2, color=WHITE, name="title")
-        return img
-
-    def sfx(self):
-        return [(0.05, "whoosh", 0.7), (0.9, "ding", 0.5), (self.at(1) + 0.2, "low_ding", 0.6)]
-
-
 # ---------- 3. 光在赶路 ----------
 
 @lru_cache(maxsize=1)
@@ -216,7 +97,6 @@ class Light(Scene):
     def draw(self, t):
         zoom_out = smooth(ramp(t, self.end(2) - 1.8, self.end(2) + 0.1))
         tex = streak_texture()
-        speed = 2600 * (1 - zoom_out) + 200
         off = int((t * 2600 - zoom_out * 1200) % W)
         img = night_gradient() * 0.6
         streak = np.concatenate([tex[:, off:], tex[:, :off]], axis=1)[:, :W]
@@ -367,7 +247,7 @@ class Photos(Scene):
         img = sky(t, zoom=1.0 + 0.03 * t / self.d, gain=0.9)
         fade_text(img, "星空 = 一叠「旧照片」", W / 2, 170, 70, t, 0.3, name="title")
         for i, ((x, y), name, when, col) in enumerate(self.ITEMS):
-            t0 = 0.9 + i * 0.85
+            t0 = 0.5 + i * 0.7
             s, a = pop(t, t0, 0.4)
             if a <= 0:
                 continue
@@ -387,7 +267,7 @@ class Photos(Scene):
         return img
 
     def sfx(self):
-        return [(0.9 + i * 0.85, "click", 0.9) for i in range(5)]
+        return [(0.5 + i * 0.7, "click", 0.9) for i in range(5)]
 
 
 # ---------- 8. 划掉"早就不存在了" ----------
@@ -530,7 +410,6 @@ def desert_assets():
 class Desert(Scene):
     def draw(self, t):
         base, dune = desert_assets()
-        P = (-250.0, -500.0)
         M = affine(1.0, t * 0.9, center=(W / 2, H / 2), src_center=(W / 2 + 300, H / 2 + 200))
         img = base * 1.3 + big_sky().render(t, M) * 1.5
         m = dune[..., 0] > 0
@@ -901,102 +780,36 @@ class Question(Scene):
 
 class Next(Scene):
     def draw(self, t):
-        u = smooth(ramp(t, 0.0, self.d))
-        top = (lerp(0.16, 0.30, u * 0.5), lerp(0.36, 0.30, u * 0.5), lerp(0.80, 0.85, u * 0.5))
-        img = vgradient(top, (0.65, 0.80, 0.96), curve=1.1)
-        halo(img, 1500, 220, 500, (1, 0.97, 0.85), 0.8)
-        circle(img, 1500, 220, 60, (1, 1, 0.95))
-        rooftops(img, 980, seed=3, color=(0.07, 0.1, 0.18))
-        pill(img, "下期预告", W / 2, 240, 34, (0.1, 0.04, 0.0), ORANGE, alpha=smooth(ramp(t, 0.1, 0.5)))
-        fade_text(img, "紫光明明散射得更多", W / 2, 400, 70, t, self.at(1) + 0.1, name="title", stroke=0)
-        title_text(img, "天空为什么不是紫色的？", W / 2, 520, 96, t, self.at(1) + 1.6, color=(0.98, 0.98, 1.0))
+        img = vgradient((0.20, 0.36, 0.70), (0.86, 0.66, 0.50), curve=1.2)
+        rooftops(img, 900, seed=3, color=(0.10, 0.12, 0.20))
+        rect(img, 0, 900, W, H, (0.05, 0.06, 0.09))
+        bench(img, 700, 900)
+        person_silhouette(img, 560, 900, 230, color=(0.02, 0.025, 0.04), look_up=0.0)
+        bus_stop(img, 420, 900, 380)
+        pill(img, "下期预告", W / 2, 200, 34, (0.1, 0.04, 0.0), ORANGE, alpha=smooth(ramp(t, 0.05, 0.35)))
+        title_text(img, "公交车 10 分钟一班", 1250, 400, 72, t, 0.4)
+        title_text(img, "为什么你总要等更久？", 1250, 510, 72, t, 1.6, color=(0.98, 0.98, 1.0))
+        bx = lerp(W + 520, W + 520 - 700 * ease_out(ramp(t, 2.6, 4.0)), 1.0)
+        bus(img, bx, 900, 520)
         return img
 
     def sfx(self):
-        return [(self.at(1) + 1.6, "ding", 0.5)]
+        return [(1.6, "ding", 0.5), (2.6, "whoosh", 0.4)]
 
 
-# ---------- 24. 片尾 ----------
-
-class Outro(Scene):
-    tag = False
-
-    def draw(self, t):
-        img = sky(t, gain=0.5) * 0.8
-        logo(img, W / 2, 260, t, 0.0)
-        fade_text(img, "反直觉研究所", W / 2, 430, 110, t, 0.2, name="title")
-        fade_text(img, "你的直觉，可能是错的", W / 2, 540, 48, t, self.at(0), color=TEAL, name="title")
-        fade_text(img, "我们下期见", W / 2, 640, 40, t, self.at(1), color=GREY, name="medium")
-        fade_text(img, "本视频画面与配音由 AI 生成", W / 2, 840, 30, t, 0.6, color=GREY, name="medium")
-        img *= 1 - smooth(ramp(t, self.d - 0.8, self.d))
-        return img
-
-    def sfx(self):
-        return [(0.1, "whoosh", 0.5), (self.at(1) + 0.3, "shimmer", 0.6)]
+SCENE_CLASSES = {"hook": Hook, "title": make_title("第一季 · 反直觉 #01", "你看到的星星，还在吗？"),
+                 "light": Light, "timers": Timers, "sirius": Sirius, "polaris": Polaris, "photos": Photos,
+                 "strike": Strike, "lifetimes": Lifetimes, "range": Range, "analogy": Analogy, "desert": Desert,
+                 "dots": Dots, "orion": Orion, "dimming": Dimming, "dust": Dust, "supernova": Supernova,
+                 "wave": Wave, "andromeda": Andromeda, "savanna": Savanna, "verdict": Verdict,
+                 "question": Question, "next": Next, "outro": Outro}
 
 
-SCENE_CLASSES = {"hook": Hook, "title": Title, "light": Light, "timers": Timers, "sirius": Sirius,
-                 "polaris": Polaris, "photos": Photos, "strike": Strike, "lifetimes": Lifetimes, "range": Range,
-                 "analogy": Analogy, "desert": Desert, "dots": Dots, "orion": Orion, "dimming": Dimming,
-                 "dust": Dust, "supernova": Supernova, "wave": Wave, "andromeda": Andromeda, "savanna": Savanna,
-                 "verdict": Verdict, "question": Question, "next": Next, "outro": Outro}
-
-
-# ---------- 合成：场景 + 转场 + 字幕 + 角标 ----------
-
-class Compositor:
-    XF = 0.3
-
-    def __init__(self, spans, cues, total):
-        self.spans = spans
-        self.starts = [s.start for s in spans]
-        self.cues = cues
-        self.cue_starts = [c[0] for c in cues]
-        self.total = total
-        self._objs = {}
-
-    def obj(self, k):
-        if k not in self._objs:
-            sp = self.spans[k]
-            self._objs[k] = SCENE_CLASSES[sp.name](sp)
-        return self._objs[k]
-
-    def scene_objects(self):
-        return [self.obj(k) for k in range(len(self.spans))]
-
-    def _draw(self, k, T):
-        t = max(0.0, T - self.spans[k].start)
-        return self.obj(k).draw(t)
-
-    def frame(self, i):
-        T = i / FPS
-        k = max(0, bisect.bisect_right(self.starts, T) - 1)
-        img = self._draw(k, T)
-        if k + 1 < len(self.spans):
-            b = self.starts[k + 1]
-            if T > b - self.XF:
-                w = smooth((T - (b - self.XF)) / (2 * self.XF))
-                img = img * (1 - w) + self._draw(k + 1, T) * w
-        if k > 0:
-            b = self.starts[k]
-            if T < b + self.XF:
-                w = smooth((T - (b - self.XF)) / (2 * self.XF))
-                img = self._draw(k - 1, T) * (1 - w) + img * w
-        img = img * vignette_mask(0.28)
-        self.overlay(img, T, k)
-        return to_u8(img)
-
-    def overlay(self, img, T, k):
-        obj = self.obj(k)
-        if obj.tag:
-            a = smooth(ramp(T - self.spans[k].start, 0, 0.4)) if k > 0 and not self.obj(k - 1).tag else 1.0
-            circle(img, 58, 56, 7, TEAL, alpha=0.9 * a)
-            draw_text(img, "反直觉 #03", 76, 56, 32, "title", WHITE, alpha=0.85 * a, anchor="lm", shadow=0.6)
-        pill(img, "AI 生成", W - 92, 56, 22, (0.9, 0.92, 0.96), (0.05, 0.06, 0.1), alpha=0.7, name="medium", pad=(16, 6))
-        j = bisect.bisect_right(self.cue_starts, T) - 1
-        if j >= 0:
-            a, b, text = self.cues[j]
-            if a <= T < b:
-                al = smooth(ramp(T, a, a + 0.08)) * (1 - smooth(ramp(T, b - 0.08, b)))
-                draw_text(img, text, W / 2, H - 92, 50, "bold", WHITE, alpha=al, stroke=5,
-                          stroke_color=(0.02, 0.02, 0.04), shadow=0.5)
+def music(spans, total):
+    """背景音乐分段：平静 → 参宿四段紧张 → 仙女座之后转为开阔。超新星之后静音一下。"""
+    sp = {s.name: s for s in spans}
+    sections = [(0, sp["orion"].start, "calm"), (sp["orion"].start, sp["wave"].end, "tension"),
+                (sp["andromeda"].start - 0.5, total, "wonder")]
+    sup = sp["supernova"]
+    mutes = [(sup.start + sup.lines[1][1] + 0.1, sp["wave"].start + 0.4)]
+    return sections, mutes

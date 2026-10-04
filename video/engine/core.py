@@ -188,7 +188,6 @@ def circle(img, cx, cy, r, color, thickness=-1, alpha=1.0):
     if r <= 0 or alpha <= 0:
         return
     th = -1 if thickness < 0 else max(1, int(round(thickness)))
-    pad = int(r + abs(th) + 3)
     _draw_local(img, [(cx - r, cy - r), (cx + r, cy + r)], abs(th) + 3, color, alpha,
                 lambda m, p: cv2.circle(m, tuple(((p[0] + p[1]) // 2).tolist()), int(r * 4), 255, th, cv2.LINE_AA, 2))
 
