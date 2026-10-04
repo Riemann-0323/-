@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 下载成片所需的离线模型与字体到 video/.assets（约 1.2 GB，只需运行一次）
+# 下载语音识别模型（配音校对）、离线配音模型（未接 MiniMax 时预览用）与字体到 video/.assets（约 1.2 GB，只需运行一次）
 set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p .assets/fonts
@@ -8,7 +8,7 @@ cd .assets
 REL=https://github.com/k2-fsa/sherpa-onnx/releases/download
 
 if [ ! -d kokoro-multi-lang-v1_1 ]; then
-  echo "下载配音模型 Kokoro v1.1-zh ..."
+  echo "下载离线配音模型 Kokoro v1.1-zh（预览用）..."
   curl -sSLO "$REL/tts-models/kokoro-multi-lang-v1_1.tar.bz2"
   tar xjf kokoro-multi-lang-v1_1.tar.bz2 && rm kokoro-multi-lang-v1_1.tar.bz2
 fi
